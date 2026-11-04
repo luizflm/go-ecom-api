@@ -7,11 +7,10 @@ import (
 
 	"github.com/go-chi/chi/middleware"
 	"github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	repo "github.com/luizflm/go-ecom-api/internal/adapters/postgresql/sqlc"
+	"github.com/luizflm/go-ecom-api/internal/products"
 )
-
-type application struct {
-	config config
-}
 
 func (app *application) mount() http.Handler {
 	r := chi.NewRouter()
@@ -26,6 +25,10 @@ func (app *application) mount() http.Handler {
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("all good"))
 	})
+
+	productsService := products.NewService(repo.New(app.db))
+	productHandler := products.NewHandler(productsService)
+	r.Get("/products", productHandler.ListProducts)
 
 	return r
 }
@@ -42,6 +45,11 @@ func (app *application) run(h http.Handler) error {
 	log.Printf("server running on port %s", app.config.addr)
 
 	return srv.ListenAndServe()
+}
+
+type application struct {
+	config config
+	db     *pgx.Conn
 }
 
 type config struct {
