@@ -11,3 +11,9 @@ func Write(w http.ResponseWriter, status int, data any) {
 
 	json.NewEncoder(w).Encode(data)
 }
+
+func WriteError(w http.ResponseWriter, status int, message string) {
+	Write(w, status, struct {
+		Error string `json:"error"`
+	}{Error: message})
+}
