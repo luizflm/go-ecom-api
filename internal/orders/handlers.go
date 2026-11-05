@@ -25,6 +25,11 @@ func (h *handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if err := validateCreateOrder(tempOrder); err != nil {
+		json.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
 	createdOrder, err := h.service.PlaceOrder(r.Context(), tempOrder)
 	if err != nil {
 		log.Println(err)
@@ -32,12 +37,12 @@ func (h *handler) PlaceOrder(w http.ResponseWriter, r *http.Request) {
 		case errors.Is(err, ErrProductNotFound):
 			json.WriteError(w, http.StatusNotFound, ErrProductNotFound.Error())
 		case errors.Is(err, ErrProductNoStock):
-			json.WriteError(w, http.StatusNotFound, ErrProductNoStock.Error())
+			json.WriteError(w, http.StatusConflict, ErrProductNoStock.Error())
 		default:
 			json.WriteError(w, http.StatusInternalServerError, "internal server error")
 		}
 		return
 	}
 
-	json.Write(w, http.StatusOK, createdOrder)
+	json.Write(w, http.StatusCreated, createdOrder)
 }

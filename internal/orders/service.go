@@ -2,7 +2,7 @@ package orders
 
 import (
 	"context"
-	"fmt"
+	"errors"
 
 	"github.com/jackc/pgx/v5"
 	repo "github.com/luizflm/go-ecom-api/internal/adapters/postgresql/sqlc"
@@ -25,14 +25,6 @@ func NewService(repo *repo.Queries, db *pgx.Conn) Service {
 }
 
 func (s *svc) PlaceOrder(ctx context.Context, tempOrder createOrderParams) (repo.Order, error) {
-	if tempOrder.CustomerID == 0 {
-		return repo.Order{}, fmt.Errorf("customer ID is required")
-	}
-
-	if len(tempOrder.Items) == 0 {
-		return repo.Order{}, fmt.Errorf("at least one item is required")
-	}
-
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
 		return repo.Order{}, err
@@ -47,13 +39,27 @@ func (s *svc) PlaceOrder(ctx context.Context, tempOrder createOrderParams) (repo
 	}
 
 	for _, item := range tempOrder.Items {
-		product, err := qtx.FindProductByID(ctx, item.ProductID)
+		_, err := qtx.FindProductByID(ctx, item.ProductID)
 		if err != nil {
-			return repo.Order{}, ErrProductNotFound
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return repo.Order{}, ErrProductNotFound
+			default:
+				return repo.Order{}, err
+			}
 		}
 
-		if product.Quantity < item.Quantity {
-			return repo.Order{}, ErrProductNoStock
+		product, err := qtx.ReduceProductStock(ctx, repo.ReduceProductStockParams{
+			ID:       item.ProductID,
+			Quantity: item.Quantity,
+		})
+		if err != nil {
+			switch {
+			case errors.Is(err, pgx.ErrNoRows):
+				return repo.Order{}, ErrProductNoStock
+			default:
+				return repo.Order{}, err
+			}
 		}
 
 		_, err = qtx.CreateOrderItem(ctx, repo.CreateOrderItemParams{
@@ -67,7 +73,9 @@ func (s *svc) PlaceOrder(ctx context.Context, tempOrder createOrderParams) (repo
 		}
 	}
 
-	tx.Commit(ctx)
+	if err := tx.Commit(ctx); err != nil {
+		return repo.Order{}, err
+	}
 
 	return order, nil
 }

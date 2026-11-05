@@ -5,6 +5,13 @@ SELECT * FROM products;
 SELECT * FROM products
 WHERE id = $1;
 
+-- name: ReduceProductStock :one
+UPDATE products
+SET quantity = quantity - $2
+WHERE id = $1
+  AND quantity >= $2
+RETURNING *;
+
 -- name: CreateOrder :one
 INSERT INTO orders (
     customer_id
